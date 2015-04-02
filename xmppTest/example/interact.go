@@ -119,7 +119,7 @@ func main() {
 				fmt.Printf("Sent %d - per second %f\n",messagesSent,
 					float32(messagesSent)*1000000000/float32(ReceivedTime.Sub(startTime)))
 				fmt.Printf("Back %d (timeouts %f%%) - ave transmit time %d (longest %d)\n",
-					messagesReceived,float32(100*timeouts)/float32(messagesSent)),
+					messagesReceived,float32(100*timeouts)/float32(messagesSent),
 					averageTransmitTime,longestWait)
 			}
 		default:
@@ -175,16 +175,17 @@ func loginWorker(in <-chan int, workerNum int, Messages chan xmpp.Stanza,
 		// xmpp.JID is a string of the form <node>@<domain>/<resource>, with /<resource> optional.
 
 		// Set up client connection section.
-		status_updater := make(chan xmpp.Status)
-		go func(worker int, user string, tempXmppUser *XmppUser) {
-			for status := range status_updater {
-				fmt.Printf("connection status(%s): %s\n", user, xmpp.StatusMessage[status])
-				tempXmppUser.Status = status
-			}
-		}(workerNum,user,&tempXmppUser)
-		tlsConf := tls.Config{InsecureSkipVerify: true}
 		start:=time.Now()
 		for attempt:=0; attempt<5; attempt++ {
+			status_updater := make(chan xmpp.Status)
+			go func(worker int, user string, tempXmppUser *XmppUser) {
+				for status := range status_updater {
+					fmt.Printf("connection status(%s): %s\n", 
+						user, xmpp.StatusMessage[status])
+					tempXmppUser.Status = status
+				}
+			}(workerNum,user,&tempXmppUser)
+			tlsConf := tls.Config{InsecureSkipVerify: true}
 			client, err := xmpp.NewClient(&jid, password, &tlsConf, nil, 
 					xmpp.Presence{}, status_updater, Messages)
 			tempXmppUser.Time = int64(time.Now().Sub(start))
