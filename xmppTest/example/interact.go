@@ -95,10 +95,12 @@ func main() {
 			float32(totalLoginTime)/float32(numOfClients)/1000000000, 
 			float32(totalTime)/float32(len(xmppUsers))/1000000000)
 	} else if len(xmppUsers)>0 {
-		fmt.Printf("\n\n\nNo clients successfully logged in. Average Time: %d\n",
+		fmt.Printf("\nNo clients successfully logged in. Average Time: %d\n",
 			totalTime/int64(len(xmppUsers)))
+		return
 	} else {
-		fmt.Println("\n\n\nNo viable clients returned in total time %d\n",totalTime)
+		fmt.Printf("\nNo viable clients returned in total time %d\n",totalTime)
+		return
 	}
 	buffer := make([]byte, 1)
 	fmt.Println("\nPaused.  Press the \"Enter\" key to continue.\n(Press enter again to finish.)")
