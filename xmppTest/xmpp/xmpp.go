@@ -260,11 +260,12 @@ func newClient(tcp *net.TCPConn, jid *JID, password string, tlsconf *tls.Config,
 }
 
 func (cl *Client) Close() {
-	// Shuts down the receivers:
-	cl.setStatus(StatusShutdown)
-
-	// Shuts down the senders:
-	cl.shutdownOnce.Do(func() { close(cl.Send) })
+	cl.shutdownOnce.Do(func() { 
+		// Shuts down the receivers:
+		cl.setStatus(StatusShutdown)
+		// Shuts down the senders:
+		close(cl.Send) 
+	})
 }
 
 // If there's a buffered error in the channel, return it. Otherwise,
