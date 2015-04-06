@@ -178,7 +178,7 @@ func SendToClient(sendFrom *XmppUserType, stanza xmpp.Stanza) bool {
 
 func loadUserCountChannel(startUserCount, userCount int) chan int {
 	userCountChannel := make(chan int, userCount)
-	for count := startUserCount; count <= startUserCount+userCount; count++ {
+	for count := startUserCount; count < startUserCount+userCount; count++ {
 		userCountChannel <- count
 	}
 	close(userCountChannel)	
