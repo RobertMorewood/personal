@@ -54,6 +54,11 @@ type Extension struct {
 	SendFilter Filter
 }
 
+type Incoming struct {
+	Stanza Stanza
+	Client *Client
+}
+
 // The client in a client-server XMPP connection.
 type Client struct {
 	// This client's full JID, including resource
@@ -65,7 +70,7 @@ type Client struct {
 	// Incoming XMPP stanzas from the remote will be published on
 	// this channel. Information which is used by this library to
 	// set up the XMPP stream will not appear here.
-	Recv <-chan Stanza
+	Recv <-chan Incoming // Stanza
 	// Outgoing XMPP stanzas to the server should be sent to this
 	// channel. The application should not close this channel;
 	// rather, call Close().
@@ -90,7 +95,7 @@ type Client struct {
 // may be specified. The initial presence will be broadcast. If status
 // is non-nil, connection progress information will be sent on it.
 func NewClient(jid *JID, password string, tlsconf *tls.Config, exts []Extension,
-	pr Presence, status chan<- Status, messages chan Stanza) (*Client, error) {
+	pr Presence, status chan<- Status, messages chan Incoming) (*Client, error) {
 
 	// Resolve the domain in the JID.
 	domain := jid.Domain()
@@ -130,7 +135,7 @@ func NewClient(jid *JID, password string, tlsconf *tls.Config, exts []Extension,
 // to NewClient.
 func NewClientFromHost(jid *JID, password string, tlsconf *tls.Config,
 	exts []Extension, pr Presence, status chan<- Status, host string,
-	port int, messages chan Stanza) (*Client, error) {
+	port int, messages chan Incoming) (*Client, error) {
 
 	addrStr := fmt.Sprintf("%s:%d", host, port)
 	addr, err := net.ResolveTCPAddr("tcp", addrStr)
@@ -146,7 +151,7 @@ func NewClientFromHost(jid *JID, password string, tlsconf *tls.Config,
 }
 
 func newClient(tcp *net.TCPConn, jid *JID, password string, tlsconf *tls.Config,
-	exts []Extension, pr Presence, status chan<- Status, recvFiltXmpp chan Stanza) (*Client, error) {
+	exts []Extension, pr Presence, status chan<- Status, recvFiltXmpp chan Incoming) (*Client, error) {
 
 	// Include the mandatory extensions.
 	roster := newRosterExt()
@@ -203,7 +208,7 @@ func newClient(tcp *net.TCPConn, jid *JID, password string, tlsconf *tls.Config,
 	// app sees or sends.
 	//recvFiltXmpp := make(chan Stanza)
 	cl.Recv = recvFiltXmpp
-	go filterMgr(cl.recvFilterAdd, recvRawXmpp, recvFiltXmpp, false)
+	go filterInMgr(cl.recvFilterAdd, recvRawXmpp, recvFiltXmpp, cl, false)
 	sendFiltXmpp := make(chan Stanza)
 	cl.Send = sendFiltXmpp
 	go filterMgr(cl.sendFilterAdd, sendFiltXmpp, sendRawXmpp, true)

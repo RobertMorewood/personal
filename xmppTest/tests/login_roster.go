@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
-	"os"
+	//"os"
 	"strconv"
 	"time"
 	"runtime"
@@ -22,6 +22,7 @@ const (
 	LOGIN_RETRY_COUNT = 10
 	MESSAGE_DELAY = 10000000 // nanoseconds
 	MESSAGE_TIMEOUT = 2000000000 //nanoseconds
+	TIME_FORMAT = "2006-01-02_15:04:05.999999999_-0700_MST"
 )
 
 var userPrefix string = USER_PREFIX
@@ -72,7 +73,7 @@ func main() {
 	var logins sync.WaitGroup
 	logins.Add(LOGIN_WORKERS)
 	returnUserChannel := make(chan *XmppUserType, userCount)
-	Messages := make(chan xmpp.Stanza)
+	Messages := make(chan xmpp.Incoming)
 	loginTimer := time.Now().Unix()
 	for worker := 0; worker < LOGIN_WORKERS; worker++ {
 		go loginWorker(userCountChannel, worker, Messages, returnUserChannel, &logins) 
@@ -83,41 +84,51 @@ func main() {
 
 	xmppUsers := LoadMapPrintStatistics(returnUserChannel, loginTimer)
 	if len(xmppUsers)==0 {return}
-	
+	/*
 	buffer := make([]byte, 1)
 	fmt.Println("\nPaused.  Press the \"Enter\" key to continue.\n(Press enter again to finish.)")
 	os.Stdin.Read(buffer)  // pause
-	
+	*/
 	//  Message Sending Part
-	MessageSent := make(map[string]time.Time, 0)
+	//MessageSent := make(map[string]time.Time, 0)
 	var messageStats MessageStatsType
 	messageStats.startTime = time.Now()
-	nextSend := messageStats.startTime.Add(time.Duration(messageDelay))
-
+	//nextSend := messageStats.startTime.Add(time.Duration(messageDelay))
+	/*
 	working := true
 	go func() {
 		os.Stdin.Read(buffer) // pause
 		working = false
 	}()
-
-	for working { 
+	*/
+	for _,xmppUser := range xmppUsers {
+		for count := 1; count <=50; count ++ {
+			messageFound := true
+			for messageFound {
+				select {
+				case message := <-Messages :
+					ProcessMessage(message,&messageStats)
+				default :
+					messageFound = false
+				}
+			}
+			if !InviteUsers(xmppUser,(xmppUser.User+count)%100000) {
+				fmt.Printf("Fail to invite %d from %d\n",xmppUser.User,(xmppUser.User+count)%100000)
+			}
+			if !InviteUsers(xmppUser,(100000+xmppUser.User-count)%100000) {
+				fmt.Printf("Fail to invite %d from %d\n",xmppUser.User,(100000+xmppUser.User-count)%100000)
+			}
+		}	
+	}
+	Timeout := time.Now().Add(time.Duration(2000000000))
+	for time.Now().Before(Timeout) { 
 		// fmt.Println(nextSend)
 		select {
 		case message := <-Messages :
-			ProcessMessage(message,MessageSent,&messageStats)
+			ProcessMessage(message,&messageStats)
+			Timeout = time.Now().Add(time.Duration(2000000000))
 		default:
-			if time.Now().After(nextSend) {
-				nextSend = nextSend.Add(time.Duration(MESSAGE_DELAY))
-				sendFrom := randXmppUser(xmppUsers)
-				if sendFrom==nil { break }
-				sendTo := anotherRandXmppUser(xmppUsers,sendFrom.BareJid)
-				if sendTo==nil {break}
-				id := strconv.FormatInt(messageStats.messagesSent,10)
-				if SendMessage(sendFrom,sendTo,rand_str(5),id) { 
-						MessageSent[id] = time.Now()
-						messageStats.messagesSent++
-				}
-			}
+			
 		}
 		runtime.Gosched()
 	}
@@ -138,9 +149,11 @@ func (MessageStats MessageStatsType) Report() {
 		MessageStats.averageTransmitTime/1000000,MessageStats.longestWait/1000000)
 }
 
-func ProcessMessage(message xmpp.Stanza, MessageSent map[string]time.Time, MessageStats *MessageStatsType) {
-	messageID := message.GetHeader().Id
-	if DataIncoming, ok := MessageSent[messageID]; ok {
+func ProcessMessage(message xmpp.Incoming, MessageStats *MessageStatsType) {
+	header := message.Stanza.GetHeader()
+	if header.Type == "subscribe" && string(header.To) != "" {
+		DataIncoming,err := time.Parse(TIME_FORMAT,header.Id)
+		if err!=nil { return }
 		ReceivedTime := time.Now()
 		difference := int64(ReceivedTime.Sub(DataIncoming))
 		if difference > MessageStats.longestWait {
@@ -154,18 +167,24 @@ func ProcessMessage(message xmpp.Stanza, MessageSent map[string]time.Time, Messa
 		} else {
 			MessageStats.timeouts++
 		}
-		delete(MessageSent,messageID)
-		MessageStats.Report()
+		stanza := &xmpp.Presence{}
+		stanza.Header.Id = header.Id
+		stanza.Header.From = header.To
+		stanza.Header.To = header.From
+		stanza.Header.Type = "subscribed"
+		defer func(){ recover() }()
+		message.Client.Send <- stanza		
+		//MessageStats.Report()
 	}
 }
 
-func SendMessage(sendFrom, sendTo *XmppUserType, message, id string) bool {
-	stanza := &xmpp.Message{}
-	stanza.Header.Id = id
+func InviteUsers(sendFrom *XmppUserType, count int) bool {
+	stanza := &xmpp.Presence{}
+	stanza.Header.Id = time.Now().Format(TIME_FORMAT)
 	stanza.Header.From = sendFrom.BareJid
-	stanza.Header.To = sendTo.Client.Jid
-	stanza.Header.Lang = "en"
-	stanza.Body = []xmpp.Text{xmpp.Text{Chardata:message}}
+	if count==0 {count=100000}
+	stanza.Header.To = BareJID(strconv.Itoa(count))
+	stanza.Header.Type = "subscribe"
 	return SendToClient(sendFrom,stanza)
 }
 	
@@ -185,7 +204,7 @@ func loadUserCountChannel(startUserCount, userCount int) chan int {
 	return userCountChannel
 }
 
-func loginWorker(in <-chan int, workerNum int, Messages chan xmpp.Stanza, 
+func loginWorker(in <-chan int, workerNum int, Messages chan xmpp.Incoming, 
 				out chan *XmppUserType, logins *sync.WaitGroup) {
 	for counter := range in {
 		var newXmppUser XmppUserType
@@ -218,7 +237,7 @@ func loginWorker(in <-chan int, workerNum int, Messages chan xmpp.Stanza,
 			newXmppUser.Client = client
 			fmt.Printf("%d) NewClient(%s) Status=%d\n", workerNum, user, newXmppUser.Status)
 			if err != nil {
-				fmt.Printf("%d) NewClientERROR(%d:status=%d): %v\n", workerNum, user, newXmppUser.Status, err)
+				fmt.Printf("%d) NewClientERROR(%s:status=%d): %v\n", workerNum, user, newXmppUser.Status, err)
 			} else {
 				timeout := make(chan bool)
 				go func() {

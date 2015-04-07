@@ -23,7 +23,23 @@ func filterMgr(filterAdd <-chan Filter, input <-chan Stanza, output chan<- Stanz
 		}
 	}
 }
+func filterInMgr(filterAdd <-chan Filter, input <-chan Stanza, output chan<- Incoming, client *Client, closechan bool) {
+	if closechan { defer close(output) }
+	for {
+		select {
+		case stan, ok := <-input:
+			if !ok {
+				return
+			}
+			output <- Incoming{Stanza:stan,Client:client}
 
+		case filt := <-filterAdd:
+			ch := make(chan Stanza)
+			go filt(input, ch)
+			input = ch
+		}
+	}
+}
 // AddRecvFilter adds a new filter to the top of the stack through which
 // incoming stanzas travel on their way up to the client.
 func (cl *Client) AddRecvFilter(filt Filter) {
