@@ -20,7 +20,7 @@ const (
 	START_USER_COUNT = 1
 	LOGIN_WORKERS = 20
 	LOGIN_RETRY_COUNT = 10
-	MESSAGE_DELAY = 10000000 // nanoseconds
+	MESSAGE_DELAY = 50000000 // nanoseconds
 	MESSAGE_TIMEOUT = 2000000000 //nanoseconds
 )
 
@@ -72,7 +72,7 @@ func main() {
 	var logins sync.WaitGroup
 	logins.Add(LOGIN_WORKERS)
 	returnUserChannel := make(chan *XmppUserType, userCount)
-	Messages := make(chan xmpp.Stanza)
+	Messages := make(chan xmpp.Incoming)
 	loginTimer := time.Now().Unix()
 	for worker := 0; worker < LOGIN_WORKERS; worker++ {
 		go loginWorker(userCountChannel, worker, Messages, returnUserChannel, &logins) 
@@ -104,9 +104,11 @@ func main() {
 		// fmt.Println(nextSend)
 		select {
 		case message := <-Messages :
-			ProcessMessage(message,MessageSent,&messageStats)
+			fmt.Printf("\nMessage: to %s\n%#v\n",string(message.Client.Jid),message.Stanza)
+			ProcessMessage(message.Stanza,MessageSent,&messageStats)
 		default:
 			if time.Now().After(nextSend) {
+				fmt.Printf("?")
 				nextSend = nextSend.Add(time.Duration(MESSAGE_DELAY))
 				sendFrom := randXmppUser(xmppUsers)
 				if sendFrom==nil { break }
@@ -116,8 +118,9 @@ func main() {
 				if SendMessage(sendFrom,sendTo,rand_str(5),id) { 
 						MessageSent[id] = time.Now()
 						messageStats.messagesSent++
+						fmt.Printf("!")
 				}
-			}
+			} else {fmt.Printf(".")}
 		}
 		runtime.Gosched()
 	}
@@ -185,7 +188,7 @@ func loadUserCountChannel(startUserCount, userCount int) chan int {
 	return userCountChannel
 }
 
-func loginWorker(in <-chan int, workerNum int, Messages chan xmpp.Stanza, 
+func loginWorker(in <-chan int, workerNum int, Messages chan xmpp.Incoming, 
 				out chan *XmppUserType, logins *sync.WaitGroup) {
 	for counter := range in {
 		var newXmppUser XmppUserType

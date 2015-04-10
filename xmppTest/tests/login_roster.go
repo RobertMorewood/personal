@@ -21,7 +21,7 @@ const (
 	LOGIN_WORKERS = 20
 	LOGIN_RETRY_COUNT = 10
 	MESSAGE_DELAY = 10000000 // nanoseconds
-	MESSAGE_TIMEOUT = 2000000000 //nanoseconds
+	MESSAGE_TIMEOUT = 2000000000 //nanosecondscopnsole
 	TIME_FORMAT = "2006-01-02_15:04:05.999999999_-0700_MST"
 )
 
@@ -47,6 +47,7 @@ type MessageStatsType struct {
 	averageTransmitTime int64
 	longestWait int64
 	startTime time.Time
+	subscriptions int64
 }
 
 // Stress test an XMPP server.
@@ -114,19 +115,23 @@ func main() {
 			}
 			if !InviteUsers(xmppUser,(xmppUser.User+count)%100000) {
 				fmt.Printf("Fail to invite %d from %d\n",xmppUser.User,(xmppUser.User+count)%100000)
+			} else {
+				messageStats.messagesSent++
 			}
 			if !InviteUsers(xmppUser,(100000+xmppUser.User-count)%100000) {
 				fmt.Printf("Fail to invite %d from %d\n",xmppUser.User,(100000+xmppUser.User-count)%100000)
+			} else {
+				messageStats.messagesSent++
 			}
 		}	
 	}
-	Timeout := time.Now().Add(time.Duration(2000000000))
+	Timeout := time.Now().Add(time.Duration(200000000000))
 	for time.Now().Before(Timeout) { 
 		// fmt.Println(nextSend)
 		select {
 		case message := <-Messages :
 			ProcessMessage(message,&messageStats)
-			Timeout = time.Now().Add(time.Duration(2000000000))
+			Timeout = time.Now().Add(time.Duration(200000000000))
 		default:
 			
 		}
@@ -147,33 +152,39 @@ func (MessageStats MessageStatsType) Report() {
 		MessageStats.messagesReceived, MessageStats.timeouts,
 		float32(100*MessageStats.timeouts)/float32(MessageStats.messagesReceived),
 		MessageStats.averageTransmitTime/1000000,MessageStats.longestWait/1000000)
+	fmt.Printf("%s subscriptions responded.\n",MessageStats.subscriptions)
 }
 
 func ProcessMessage(message xmpp.Incoming, MessageStats *MessageStatsType) {
 	header := message.Stanza.GetHeader()
-	if header.Type == "subscribe" && string(header.To) != "" {
-		DataIncoming,err := time.Parse(TIME_FORMAT,header.Id)
-		if err!=nil { return }
-		ReceivedTime := time.Now()
-		difference := int64(ReceivedTime.Sub(DataIncoming))
-		if difference > MessageStats.longestWait {
-			MessageStats.longestWait = difference
-		}
-		if difference < MESSAGE_TIMEOUT {
-			MessageStats.averageTransmitTime = 
-				(MessageStats.averageTransmitTime*MessageStats.messagesReceived+
-					difference)/(MessageStats.messagesReceived+1)
-			MessageStats.messagesReceived++
-		} else {
-			MessageStats.timeouts++
+	fmt.Printf("\nMessage for %s:\n%#v\n",string(message.Client.Jid),message.Stanza)
+	if header.Type == "subscribe" {
+		if string(header.To) != "" {
+			DataIncoming,err := time.Parse(TIME_FORMAT,header.Id)
+			if err!=nil { return }
+			ReceivedTime := time.Now()
+			difference := int64(ReceivedTime.Sub(DataIncoming))
+			if difference > MessageStats.longestWait {
+				MessageStats.longestWait = difference
+			}
+			if difference < MESSAGE_TIMEOUT {
+				MessageStats.averageTransmitTime = 
+					(MessageStats.averageTransmitTime*MessageStats.messagesReceived+
+						difference)/(MessageStats.messagesReceived+1)
+				MessageStats.messagesReceived++
+			} else {
+				MessageStats.timeouts++
+			}
 		}
 		stanza := &xmpp.Presence{}
 		stanza.Header.Id = header.Id
-		stanza.Header.From = header.To
+		stanza.Header.From = message.Client.Jid.Bare()
 		stanza.Header.To = header.From
 		stanza.Header.Type = "subscribed"
 		defer func(){ recover() }()
-		message.Client.Send <- stanza		
+		message.Client.Send <- stanza
+		fmt.Println("\n>>> subscribed sent")
+		MessageStats.subscriptions++	
 		//MessageStats.Report()
 	}
 }

@@ -265,6 +265,7 @@ func newClient(tcp *net.TCPConn, jid *JID, password string, tlsconf *tls.Config,
 }
 
 func (cl *Client) Close() {
+	defer recover()
 	cl.shutdownOnce.Do(func() { 
 		// Shuts down the receivers:
 		cl.setStatus(StatusShutdown)
