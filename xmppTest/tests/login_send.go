@@ -88,18 +88,30 @@ func main() {
 	fmt.Println("\nPaused.  Press the \"Enter\" key to continue.\n(Press enter again to finish.)")
 	os.Stdin.Read(buffer)  // pause
 	
-	//  Message Sending Part
-	MessageSent := make(map[string]time.Time, 0)
-	var messageStats MessageStatsType
-	messageStats.startTime = time.Now()
-	nextSend := messageStats.startTime.Add(time.Duration(messageDelay))
 
 	working := true
 	go func() {
 		os.Stdin.Read(buffer) // pause
 		working = false
 	}()
-
+	
+	clearingLoginMessages := true
+	for clearingLoginMessages && working { 
+		select {
+			case message := <-Messages :
+				//fmt.Printf("\nMessage: to %s\n%#v\n",string(message.Client.Jid),message.Stanza)
+				ProcessMessage(message.Stanza,MessageSent,&messageStats)
+			default:
+				clearingLoginMessages = false
+		}
+	}
+	
+	//  Message Sending Part
+	MessageSent := make(map[string]time.Time, 0)
+	var messageStats MessageStatsType
+	messageStats.startTime = time.Now()
+	nextSend := messageStats.startTime.Add(time.Duration(messageDelay))
+	
 	for working { 
 		// fmt.Println(nextSend)
 		select {
