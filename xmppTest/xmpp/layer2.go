@@ -142,6 +142,7 @@ func (cl *Client) sendXml(w io.Writer, ch <-chan interface{}) {
 	enc := xml.NewEncoder(w)
 
 	for obj := range ch {
+		fmt.Printf(",")
 		if st, ok := obj.(*stream); ok {
 			_, err := w.Write([]byte(st.String()))
 			if err != nil {
@@ -155,5 +156,6 @@ func (cl *Client) sendXml(w io.Writer, ch <-chan interface{}) {
 				break
 			}
 		}
+		fmt.Printf(".")
 	}
 }

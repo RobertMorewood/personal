@@ -5,6 +5,7 @@ package xmpp
 import (
 	"encoding/xml"
 	"reflect"
+	"fmt"
 )
 
 // Roster query/result
@@ -95,10 +96,13 @@ func (r *Roster) makeFilters() (Filter, Filter) {
 		for {
 			select {
 			case stan, ok := <-in:
+				fmt.Printf("{")
 				if !ok {
+					fmt.Printf("boom")
 					return
 				}
 				out <- stan
+				fmt.Printf("}")
 			case stan := <-r.toServer:
 				out <- stan
 			}

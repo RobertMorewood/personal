@@ -104,25 +104,28 @@ func main() {
 		// fmt.Println(nextSend)
 		select {
 		case message := <-Messages :
-			fmt.Printf("\nMessage: to %s\n%#v\n",string(message.Client.Jid),message.Stanza)
+			//fmt.Printf("\nMessage: to %s\n%#v\n",string(message.Client.Jid),message.Stanza)
 			ProcessMessage(message.Stanza,MessageSent,&messageStats)
 		default:
 			if time.Now().After(nextSend) {
-				fmt.Printf("?")
 				nextSend = nextSend.Add(time.Duration(MESSAGE_DELAY))
 				sendFrom := randXmppUser(xmppUsers)
 				if sendFrom==nil { break }
 				sendTo := anotherRandXmppUser(xmppUsers,sendFrom.BareJid)
 				if sendTo==nil {break}
+				//fmt.Printf("%s:%s",sendFrom.Client.Jid.Node(),sendTo.Client.Jid.Node())
 				id := strconv.FormatInt(messageStats.messagesSent,10)
 				if SendMessage(sendFrom,sendTo,rand_str(5),id) { 
 						MessageSent[id] = time.Now()
 						messageStats.messagesSent++
-						fmt.Printf("!")
+						//fmt.Printf("!")
 				}
-			} else {fmt.Printf(".")}
+				//fmt.Printf(":\n")
+			}
 		}
+		fmt.Printf("<")
 		runtime.Gosched()
+		fmt.Printf(">")
 	}
 	fmt.Printf("\n\n\nComplete. Message Send Statistics:\n\n")	
 	messageStats.Report()
@@ -174,8 +177,10 @@ func SendMessage(sendFrom, sendTo *XmppUserType, message, id string) bool {
 	
 func SendToClient(sendFrom *XmppUserType, stanza xmpp.Stanza) bool {
 	result := true
-	defer func(){ if recover()!=nil {result=false}}()
+	defer func(){ if recover()!=nil {fmt.Printf("!");result=false}}()
+	fmt.Printf("\\")
 	sendFrom.Client.Send <- stanza
+	fmt.Printf("/")
 	return result
 }
 

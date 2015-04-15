@@ -1,5 +1,9 @@
 package xmpp
 
+import(
+	"fmt"
+)
+
 // Manages the stack of filters that can read and modify stanzas on
 // their way from the remote to the application.
 
@@ -14,7 +18,9 @@ func filterMgr(filterAdd <-chan Filter, input <-chan Stanza, output chan<- Stanz
 			if !ok {
 				return
 			}
+			fmt.Printf(";")
 			output <- stan
+			fmt.Printf(":")
 
 		case filt := <-filterAdd:
 			ch := make(chan Stanza)
