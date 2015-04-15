@@ -88,13 +88,14 @@ func main() {
 	fmt.Println("\nPaused.  Press the \"Enter\" key to continue.\n(Press enter again to finish.)")
 	os.Stdin.Read(buffer)  // pause
 	
-
 	working := true
 	go func() {
 		os.Stdin.Read(buffer) // pause
 		working = false
 	}()
 	
+	MessageSent := make(map[string]time.Time, 0)
+	var messageStats MessageStatsType	
 	clearingLoginMessages := true
 	for clearingLoginMessages && working { 
 		select {
@@ -107,8 +108,6 @@ func main() {
 	}
 	
 	//  Message Sending Part
-	MessageSent := make(map[string]time.Time, 0)
-	var messageStats MessageStatsType
 	messageStats.startTime = time.Now()
 	nextSend := messageStats.startTime.Add(time.Duration(messageDelay))
 	
