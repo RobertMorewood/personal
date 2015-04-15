@@ -66,7 +66,7 @@ func (cl *Client) recvTransport(socks <-chan net.Conn, w io.WriteCloser,
 		select {
 		case stat := <-status:
 			if stat == StatusRunning {
-				fmt.Printf("\nExpand Read\n")
+				//fmt.Printf("\nExpand Read\n")
 				readTimeout = l1interval*10000
 			}
 			if stat.Fatal() {
@@ -81,9 +81,9 @@ func (cl *Client) recvTransport(socks <-chan net.Conn, w io.WriteCloser,
 			time.Sleep(l1interval/10)
 		} else {
 			sock.SetReadDeadline(time.Now().Add(readTimeout))
-			fmt.Printf("\nReading Waiting %d\n",readTimeout)
+			//fmt.Printf("\nReading Waiting %d\n",readTimeout)
 			nr, err := sock.Read(p)
-			fmt.Printf("\nRead: %s\n",string(p[:nr]))
+			//fmt.Printf("\nRead: %s\n",string(p[:nr]))
 			if nr == 0 {
 				if errno, ok := err.(*net.OpError); ok {
 					if errno.Timeout() {
@@ -110,7 +110,7 @@ func (cl *Client) sendTransport(socks <-chan net.Conn, r io.Reader) {
 	p := make([]byte, 1024)
 	for {
 		nr, err := r.Read(p)
-		fmt.Printf("|")
+		//fmt.Printf("|")
 		if nr == 0 {
 			cl.setError(fmt.Errorf("send: %v", err))
 			break
@@ -130,9 +130,9 @@ func (cl *Client) sendTransport(socks <-chan net.Conn, r io.Reader) {
 			if sock == nil {
 				time.Sleep(l1interval/10)
 			} else {
-				fmt.Printf("\nSending: %s\n",string(p[:nr]))
+				//fmt.Printf("\nSending: %s\n",string(p[:nr]))
 				nw, err := sock.Write(p[:nr])
-				fmt.Printf("\nSend %d of %d\n",nw, nr)
+				//fmt.Printf("\nSend %d of %d\n",nw, nr)
 				nr -= nw
 				if nr != 0 {
 					cl.setError(fmt.Errorf("send: %v", err))

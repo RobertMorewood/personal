@@ -123,9 +123,9 @@ func main() {
 				//fmt.Printf(":\n")
 			}
 		}
-		fmt.Printf("<")
+		//fmt.Printf("<")
 		runtime.Gosched()
-		fmt.Printf(">")
+		//fmt.Printf(">")
 	}
 	fmt.Printf("\n\n\nComplete. Message Send Statistics:\n\n")	
 	messageStats.Report()
@@ -178,9 +178,9 @@ func SendMessage(sendFrom, sendTo *XmppUserType, message, id string) bool {
 func SendToClient(sendFrom *XmppUserType, stanza xmpp.Stanza) bool {
 	result := true
 	defer func(){ if recover()!=nil {fmt.Printf("!");result=false}}()
-	fmt.Printf("\\")
+	//fmt.Printf("\\")
 	sendFrom.Client.Send <- stanza
-	fmt.Printf("/")
+	//fmt.Printf("/")
 	return result
 }
 
