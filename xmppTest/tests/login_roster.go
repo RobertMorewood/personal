@@ -21,7 +21,7 @@ const (
 	LOGIN_WORKERS = 20
 	LOGIN_RETRY_COUNT = 10
 	MESSAGE_DELAY = 10000000 // nanoseconds
-	MESSAGE_TIMEOUT = 2000000000 //nanosecondscopnsole
+	MESSAGE_TIMEOUT = 2000000000 //nanoseconds
 	TIME_FORMAT = "2006-01-02_15:04:05.999999999_-0700_MST"
 )
 
@@ -67,7 +67,7 @@ func main() {
 	var speed int
 	flag.IntVar(&speed,"speed",1000000000/MESSAGE_DELAY,"Messages per second to send")
 	flag.Parse()
-	messageDelay = 1000000000/speed
+	messageDelay =             1000000000/speed
 	
 	// Do all logins
 	userCountChannel :=loadUserCountChannel(startUserCount, userCount)
@@ -93,8 +93,18 @@ func main() {
 	//  Message Sending Part
 	//MessageSent := make(map[string]time.Time, 0)
 	var messageStats MessageStatsType
+	clearingLoginMessages := true
+	for clearingLoginMessages { 
+		select {
+			case message := <-Messages :
+				//fmt.Printf("\nMessage: to %s\n%#v\n",string(message.Client.Jid),message.Stanza)
+				ProcessMessage(message,&messageStats)
+			default:
+				clearingLoginMessages = false
+		}
+	}	
 	messageStats.startTime = time.Now()
-	//nextSend := messageStats.startTime.Add(time.Duration(messageDelay))
+	nextSend := messageStats.startTime.Add(time.Duration(messageDelay))
 	/*
 	working := true
 	go func() {
@@ -105,12 +115,13 @@ func main() {
 	for _,xmppUser := range xmppUsers {
 		for count := 1; count <=50; count ++ {
 			messageFound := true
-			for messageFound {
+			for messageFound || time.Now().Before(nextSend) {
 				select {
 				case message := <-Messages :
 					ProcessMessage(message,&messageStats)
 				default :
 					messageFound = false
+					runtime.Gosched()
 				}
 			}
 			if !InviteUsers(xmppUser,(xmppUser.User+count)%100000) {
@@ -123,6 +134,8 @@ func main() {
 			} else {
 				messageStats.messagesSent++
 			}
+			nextSend = time.Now().Add(time.Duration(messageDelay))
+			runtime.Gosched()
 		}	
 	}
 	Timeout := time.Now().Add(time.Duration(200000000000))
@@ -183,7 +196,8 @@ func ProcessMessage(message xmpp.Incoming, MessageStats *MessageStatsType) {
 		stanza.Header.Type = "subscribed"
 		defer func(){ recover() }()
 		message.Client.Send <- stanza
-		fmt.Println("\n>>> subscribed sent")
+		fmt.Printf("\n>>> subscribed sent %s -> %s\n",
+			message.Client.Jid.Node(),header.From.Node())
 		MessageStats.subscriptions++	
 		//MessageStats.Report()
 	}

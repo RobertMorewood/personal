@@ -221,8 +221,8 @@ func loginWorker(in <-chan int, workerNum int, Messages chan xmpp.Incoming,
 			thisLoginDone := make(chan bool)
 			go func(worker int, user string, newXmppUser *XmppUserType) {
 				for status := range status_updater {
-					fmt.Printf("connection status(%s): %s\n", 
-						user, xmpp.StatusMessage[status])
+					fmt.Printf("%d) connection status(%s): %s\n", 
+						worker, user, xmpp.StatusMessage[status])
 					newXmppUser.Status = status
 					if status == 5 {
 						thisLoginDone <- true
