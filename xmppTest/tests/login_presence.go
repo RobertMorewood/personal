@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
-	//"os"
+	"os"
 	"strconv"
 	"time"
 	"runtime"
@@ -20,7 +20,7 @@ const (
 	START_USER_COUNT = 1
 	LOGIN_WORKERS = 20
 	LOGIN_RETRY_COUNT = 10
-	MESSAGE_DELAY = 10000000 // nanoseconds
+	MESSAGE_DELAY = 1000000000 // nanoseconds
 	MESSAGE_TIMEOUT = 2000000000 //nanoseconds
 	TIME_FORMAT = "2006-01-02_15:04:05.999999999_-0700_MST"
 )
@@ -38,6 +38,7 @@ type XmppUserType struct {
 	Retry int
 	User int
 	BareJid xmpp.JID
+	AwayStatus bool
 }
 
 type MessageStatsType struct {
@@ -67,7 +68,7 @@ func main() {
 	var speed int
 	flag.IntVar(&speed,"speed",1000000000/MESSAGE_DELAY,"Messages per second to send")
 	flag.Parse()
-	messageDelay =             1000000000/speed
+	messageDelay = 1000000000/speed
 	
 	// Do all logins
 	userCountChannel :=loadUserCountChannel(startUserCount, userCount)
@@ -85,16 +86,21 @@ func main() {
 
 	xmppUsers := LoadMapPrintStatistics(returnUserChannel, loginTimer)
 	if len(xmppUsers)==0 {return}
-	/*
+
 	buffer := make([]byte, 1)
 	fmt.Println("\nPaused.  Press the \"Enter\" key to continue.\n(Press enter again to finish.)")
 	os.Stdin.Read(buffer)  // pause
-	*/
+	
+	working := true
+	go func() {
+		os.Stdin.Read(buffer) // pause
+		working = false
+	}()
+
 	//  Message Sending Part
-	//MessageSent := make(map[string]time.Time, 0)
 	var messageStats MessageStatsType
 	clearingLoginMessages := true
-	for clearingLoginMessages { 
+	for clearingLoginMessages && working { 
 		select {
 			case message := <-Messages :
 				//fmt.Printf("\nMessage: to %s\n%#v\n",string(message.Client.Jid),message.Stanza)
@@ -102,54 +108,43 @@ func main() {
 			default:
 				clearingLoginMessages = false
 		}
-	}	
+	}
+
 	messageStats.startTime = time.Now()
 	nextSend := messageStats.startTime.Add(time.Duration(messageDelay))
-	/*
-	working := true
-	go func() {
-		os.Stdin.Read(buffer) // pause
-		working = false
-	}()
-	*/
-	for _,xmppUser := range xmppUsers {
-		for count := 1; count <=50; count ++ {
-			messageFound := true
-			for messageFound || time.Now().Before(nextSend) {
-				select {
-				case message := <-Messages :
-					ProcessMessage(message,&messageStats)
-				default :
-					messageFound = false
-					runtime.Gosched()
-				}
+	
+	for working {
+		messageFound := true
+		for messageFound {
+			select {
+			case message := <-Messages :
+				ProcessMessage(message,&messageStats)
+			default :
+				messageFound = false
+				runtime.Gosched()
 			}
-			if !InviteUsers(xmppUser,(xmppUser.User+count)%100000) {
-				fmt.Printf("Fail to invite %d from %d\n",xmppUser.User,(xmppUser.User+count)%100000)
+		}
+		if time.Now().After(nextSend){
+			xmppUser := randXmppUser(xmppUsers)
+			stanza := &xmpp.Presence{}
+			stanza.Header.Id = time.Now().Format(TIME_FORMAT)
+			//stanza.Header.From = xmppUser.BareJid
+			if xmppUser.AwayStatus {
+				stanza.Show = &xmpp.Data{Chardata:"away"} 
 			} else {
-				messageStats.messagesSent++
+				stanza.Show = &xmpp.Data{Chardata:"chat"} 
 			}
-			if !InviteUsers(xmppUser,(100000+xmppUser.User-count)%100000) {
-				fmt.Printf("Fail to invite %d from %d\n",xmppUser.User,(100000+xmppUser.User-count)%100000)
+			if ! SendToClient(xmppUser,stanza) {	
+				fmt.Printf("Fail to change status for %s to %s\n",
+					xmppUser.BareJid.Node(), stanza.Show.Chardata)
 			} else {
+				xmppUser.AwayStatus = !xmppUser.AwayStatus
 				messageStats.messagesSent++
 			}
 			nextSend = time.Now().Add(time.Duration(messageDelay))
-			runtime.Gosched()
 		}	
 	}
-	Timeout := time.Now().Add(time.Duration(20000000000))
-	for time.Now().Before(Timeout) { 
-		// fmt.Println(nextSend)
-		select {
-		case message := <-Messages :
-			ProcessMessage(message,&messageStats)
-			Timeout = time.Now().Add(time.Duration(20000000000))
-		default:
-			
-		}
-		runtime.Gosched()
-	}
+	
 	fmt.Printf("\n\n\nComplete. Message Send Statistics:\n\n")	
 	messageStats.Report()
 		
@@ -170,11 +165,24 @@ func (MessageStats MessageStatsType) Report() {
 
 func ProcessMessage(message xmpp.Incoming, MessageStats *MessageStatsType) {
 	header := message.Stanza.GetHeader()
+
 	fmt.Printf("\nMessage for %s:\n%#v\n",string(message.Client.Jid),message.Stanza)
-	if header.Type == "subscribe" {
-		if string(header.To) != "" {
-			DataIncoming,err := time.Parse(TIME_FORMAT,header.Id)
-			if err!=nil { return }
+	switch message.Stanza.(type) {
+	case *xmpp.Presence: 
+		if header.Type == "subscribe" {
+			stanza := &xmpp.Presence{}
+			stanza.Header.Id = header.Id
+			stanza.Header.From = message.Client.Jid.Bare()
+			stanza.Header.To = header.From
+			stanza.Header.Type = "subscribed"
+			defer func(){ recover() }()
+			message.Client.Send <- stanza
+			fmt.Println("\n>>> subscribed sent")
+			MessageStats.subscriptions++	
+			//MessageStats.Report()
+		}
+		DataIncoming,err := time.Parse(TIME_FORMAT,header.Id)
+		if err==nil { 
 			ReceivedTime := time.Now()
 			difference := int64(ReceivedTime.Sub(DataIncoming))
 			if difference > MessageStats.longestWait {
@@ -188,18 +196,7 @@ func ProcessMessage(message xmpp.Incoming, MessageStats *MessageStatsType) {
 			} else {
 				MessageStats.timeouts++
 			}
-		}
-		stanza := &xmpp.Presence{}
-		stanza.Header.Id = header.Id
-		stanza.Header.From = message.Client.Jid.Bare()
-		stanza.Header.To = header.From
-		stanza.Header.Type = "subscribed"
-		defer func(){ recover() }()
-		message.Client.Send <- stanza
-		fmt.Printf("\n>>> subscribed sent %s -> %s\n",
-			message.Client.Jid.Node(),header.From.Node())
-		MessageStats.subscriptions++	
-		//MessageStats.Report()
+		}		
 	}
 }
 
